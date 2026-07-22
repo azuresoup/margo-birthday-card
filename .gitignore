@@ -1,0 +1,21 @@
+# source files not needed for the deployed site
+/psd/
+
+# full-size gif originals — only the compressed -min.gif versions are used by index.html
+assets/gifs/q1.gif
+assets/gifs/q2.gif
+assets/gifs/q3.gif
+assets/gifs/q4.gif
+assets/gifs/q5.gif
+assets/gifs/q6.gif
+assets/gifs/q7.gif
+assets/gifs/q8.gif
+assets/gifs/start.gif
+assets/gifs/sailor_moon_result.gif
+assets/gifs/sailor_mercury_result.gif
+assets/gifs/sailor_mars_result.gif
+assets/gifs/sailor_jupiter_result.gif
+assets/gifs/sailor_venus_result.gif
+
+# stray sync-conflict copies
+*Edit conflict*

@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Кто ты из Сейлор Мун?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-pink:#FFE1EF;
+    --bg-lav:#E3D4FF;
+    --card:#FFF8FC;
+    --ink:#4A2E63;
+    --ink-soft:#7A5C94;
+    --gold:#FFC24B;
+    --accent:#FF7FB0;
+    --accent-2:#B79CFF;
+
+    --void:#08080b;
+    --crt-green:#39FF6A;
+    --crt-red:#FF2E4D;
+    --crt-cyan:#38F3FF;
+    --scan:rgba(255,255,255,0.03);
+
+    --darkness: 0; /* 0..1, driven by JS as quiz progresses */
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+
+  body{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:'Baloo 2', sans-serif;
+    background:
+      radial-gradient(circle at 20% 20%, var(--bg-lav), transparent 55%),
+      radial-gradient(circle at 80% 80%, var(--bg-pink), transparent 55%),
+      var(--bg-pink);
+    overflow:hidden;
+    position:relative;
+  }
+
+  /* smooth darkness layer, opacity transitions animate reliably, unlike background-gradient swaps */
+  .dark-overlay{
+    position:fixed; inset:0;
+    background:var(--void);
+    opacity:0;
+    transition:opacity 1.4s ease;
+    pointer-events:none;
+    z-index:2;
+  }
+
+  .sparkle{
+    position:absolute; font-size:1.4rem; opacity:.55;
+    animation:float 6s ease-in-out infinite;
+    pointer-events:none; user-select:none; color:var(--accent-2);
+    transition:opacity .8s ease;
+  }
+  @keyframes float{0%,100%{transform:translateY(0) rotate(0deg);}50%{transform:translateY(-18px) rotate(12deg);}}
+
+  /* corner-blink dog slot */
+  .lurker{
+    position:fixed;
+    bottom:-4vh; right:-6vw;
+    width:46vw; max-width:520px;
+    aspect-ratio:4/3;
+    opacity:0;
+    transition:opacity 1.8s ease;
+    pointer-events:none;
+    z-index:1;
+    border-radius:16px;
+    overflow:hidden;
+  }
+  .lurker img{ width:100%; height:100%; object-fit:cover; object-position:50% 8%; display:block; }
+
+  /* centered jumpscare slot, separate scary image (not the dog), appears fast, overshoots, vanishes */
+  .jump-dog{
+    position:fixed;
+    top:50%; left:50%;
+    width:70vw; max-width:640px;
+    aspect-ratio:4/3;
+    transform:translate(-50%,-50%) scale(.2);
+    opacity:0;
+    pointer-events:none;
+    z-index:45;
+    border-radius:16px;
+    overflow:hidden;
+  }
+  .jump-dog img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .jump-dog.pop{
+    animation:dogPop .6s cubic-bezier(.22,.85,.35,1) forwards;
+  }
+  @keyframes dogPop{
+    0%{ transform:translate(-50%,-50%) scale(.15); opacity:0; }
+    28%{ transform:translate(-50%,-50%) scale(1.15); opacity:1; }
+    100%{ transform:translate(-50%,-50%) scale(2.2); opacity:0; }
+  }
+
+  .stage{ position:relative; width:min(92vw, 480px); z-index:3; }
+
+  .card{
+    background:var(--card);
+    border-radius:28px;
+    padding:2.2rem 2rem;
+    box-shadow:0 20px 60px rgba(122, 70, 140, 0.25);
+    border:2px solid rgba(255,255,255,0.6);
+    position:relative;
+    transition:transform .3s ease, background .8s ease, border-color .8s ease;
+  }
+  .card.corrupted{
+    background:#1a1420;
+    border-color:rgba(255,46,77,0.4);
+  }
+
+  .eyebrow{ display:flex; align-items:center; gap:.5rem; font-size:.82rem; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft); font-weight:700; margin-bottom:.5rem; transition:color .6s ease;}
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+  .card.corrupted .eyebrow{color:#ff8fa3;}
+
+  h1{ font-size:1.4rem; color:var(--ink); font-weight:800; margin-bottom:1.4rem; line-height:1.35; transition:color .6s ease;}
+  .card.corrupted h1{color:#f4e9ff;}
+
+  .qcount{font-size:.78rem; color:var(--ink-soft); opacity:.7; margin-bottom:.6rem;}
+
+  .start{ text-align:center; }
+  .start h1{ text-align:center; }
+  .start-sub{ color:var(--ink-soft); font-size:.94rem; margin-bottom:1.4rem; line-height:1.55; }
+  .start .cta{ margin:0 auto; }
+
+  .options{ display:flex; flex-direction:column; gap:.65rem; }
+  .opt{
+    text-align:left; padding:.85rem 1.05rem; border-radius:16px;
+    border:2px solid rgba(183,156,255,0.35);
+    background:#fff; color:var(--ink); font:inherit; font-weight:600; font-size:.95rem;
+    cursor:pointer; transition:transform .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .opt:hover{ border-color:var(--accent); background:linear-gradient(90deg, #fff, #FFF0F6); transform:translateX(4px); }
+  .card.corrupted .opt{ background:#241c2e; color:#e9d9ff; border-color:rgba(255,46,77,0.3); }
+  .card.corrupted .opt:hover{ border-color:var(--crt-red); background:#2c1c22; }
+
+  /* options get an unsettling edge once the quiz has already glitched once */
+  .options.creepy .opt{
+    border-color:rgba(255,46,77,0.35);
+  }
+  .options.creepy .opt:hover{
+    border-color:var(--crt-red);
+    text-shadow:1px 0 0 var(--crt-red), -1px 0 0 var(--crt-cyan);
+  }
+
+  .gif-slot{
+    width:100%; height:210px;
+    border:2px solid rgba(183,156,255,0.35);
+    border-radius:16px;
+    overflow:hidden;
+    margin-bottom:1.2rem;
+    background:rgba(183,156,255,0.08);
+    transition:border-color .6s ease, background .6s ease;
+  }
+  .gif-slot img{ width:100%; height:100%; object-fit:cover; object-position:50% 12%; display:block; }
+  .card.corrupted .gif-slot{ border-color:rgba(255,46,77,0.4); background:rgba(255,46,77,0.06); }
+
+  .zalgo-flash{
+    position:fixed; inset:0; z-index:40;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(5,4,8,0.92);
+    opacity:0; pointer-events:none;
+    transition:opacity .12s linear;
+  }
+  .zalgo-flash.active{ opacity:1; pointer-events:all; }
+  .zalgo-flash.fading{ transition:opacity .7s ease; opacity:0; }
+  .zalgo-flash span{
+    font-family:'VT323', monospace;
+    font-size:2rem;
+    color:var(--crt-red);
+    text-align:center;
+    text-shadow:0 0 12px var(--crt-red);
+    padding:1rem;
+  }
+
+  /* "anime girl wants you to download this" modal, the only way to close it is clicking "да" */
+  .girl-modal{
+    position:fixed; inset:0; z-index:41;
+    background:rgba(5,4,8,0.95);
+    display:none; align-items:center; justify-content:center;
+    flex-direction:column;
+  }
+  .girl-modal.active{ display:flex; }
+  .girl-box{
+    width:min(88vw,380px);
+    border:2px solid var(--accent);
+    border-radius:20px;
+    padding:1.6rem 1.4rem;
+    background:#120d17;
+    box-shadow:0 0 40px rgba(255,127,176,0.25);
+    text-align:center;
+  }
+  .girl-img-slot{
+    width:100%; height:220px;
+    border:2px solid rgba(255,127,176,0.5);
+    border-radius:14px;
+    overflow:hidden;
+    background:rgba(255,127,176,0.08);
+    margin-bottom:1.1rem;
+    transition:border-color .12s ease;
+  }
+  .girl-img-slot img{ width:100%; height:100%; object-fit:cover; object-position:50% 8%; display:block; }
+  .girl-img-slot.scary{
+    border-color:rgba(255,46,77,0.6);
+  }
+  .girl-quote{
+    font-family:'Baloo 2', sans-serif;
+    font-style:italic;
+    font-weight:600;
+    color:#ffc4de;
+    font-size:.98rem;
+    line-height:1.5;
+    margin-bottom:1.3rem;
+  }
+  .girl-line{
+    font-family:'Baloo 2', sans-serif;
+    font-weight:700;
+    color:#fff0f7;
+    font-size:1.05rem;
+    line-height:1.4;
+    margin-bottom:.9rem;
+  }
+  .girl-buttons{ display:flex; gap:.8rem; justify-content:center; align-items:center; position:relative; height:52px; }
+  .girl-btn{
+    font-family:'Baloo 2', sans-serif;
+    font-weight:700;
+    font-size:.95rem;
+    padding:.7rem 1.4rem;
+    border-radius:14px;
+    cursor:pointer;
+    border:2px solid transparent;
+  }
+  .girl-btn.yes{
+    background:linear-gradient(135deg, var(--accent), var(--accent-2));
+    color:#fff;
+    box-shadow:0 6px 16px rgba(255,127,176,0.4);
+  }
+  .girl-btn.no{
+    background:transparent;
+    border-color:rgba(255,255,255,0.3);
+    color:#e9d9ff;
+    position:relative;
+    transition:transform .15s ease, opacity .15s ease;
+  }
+  .girl-btn.no.dodged{ opacity:0; pointer-events:none; }
+
+  .result{ text-align:center; }
+  .result .result-eyebrow{ justify-content:center; margin-bottom:1.1rem; }
+  .badge-ring{
+    width:92px; height:92px;
+    margin:0 auto .9rem;
+    border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow:0 10px 26px rgba(183,156,255,0.4), inset 0 0 0 4px rgba(255,255,255,0.55);
+    animation:spin-in .7s ease;
+  }
+  .result .badge{ font-size:2.6rem; display:inline-block; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.15)); }
+  @keyframes spin-in{ from{transform:scale(0) rotate(-40deg); opacity:0;} to{transform:scale(1) rotate(0); opacity:1;} }
+  .result .result-kicker{ font-size:.78rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); opacity:.75; margin-bottom:.2rem; }
+  .result h2{ font-size:1.7rem; color:var(--ink); margin-bottom:.7rem; font-weight:800; }
+  .result p{ color:var(--ink-soft); font-size:.94rem; margin-bottom:1.3rem; line-height:1.55; }
+  .result-gif-slot{
+    width:100%; height:210px;
+    border:2px solid rgba(183,156,255,0.35);
+    border-radius:16px;
+    overflow:hidden;
+    margin-bottom:1.3rem;
+    background:rgba(183,156,255,0.08);
+  }
+  .result-gif-slot img{ width:100%; height:100%; object-fit:cover; object-position:50% 12%; display:block; }
+  .result-divider{ height:1px; background:linear-gradient(90deg, transparent, rgba(183,156,255,0.4), transparent); margin-bottom:1.3rem; }
+
+  /* the result screen inherits the corrupted look, the quiz never actually calmed back down before this */
+  .card.corrupted .result-kicker{ color:#ff8fa3; }
+  .card.corrupted h2{ color:#f4e9ff; }
+  .card.corrupted .result p{ color:#e9d9ff; }
+  .card.corrupted .result-gif-slot{ border-color:rgba(255,46,77,0.4); background:rgba(255,46,77,0.06); }
+  .card.corrupted .result-divider{ background:linear-gradient(90deg, transparent, rgba(255,46,77,0.35), transparent); }
+  .cta{
+    background:linear-gradient(135deg, var(--accent), var(--accent-2));
+    color:#fff; border:none; padding:.85rem 1.5rem; border-radius:16px;
+    font:inherit; font-weight:700; cursor:pointer;
+    box-shadow:0 8px 20px rgba(255,127,176,0.4);
+  }
+
+  /* ============ FINAL FORCED-INTERACTION SEQUENCE ============ */
+  .finale-overlay{
+    position:fixed; inset:0; z-index:60;
+    background:var(--void);
+    display:none;
+    align-items:center; justify-content:center;
+    flex-direction:column;
+    text-align:center;
+    overflow:hidden;
+  }
+  .finale-overlay.active{ display:flex; }
+  .finale-overlay::before{
+    content:""; position:absolute; inset:0;
+    background:repeating-linear-gradient(0deg, var(--scan) 0px, var(--scan) 1px, transparent 1px, transparent 3px);
+    mix-blend-mode:overlay;
+  }
+  .finale-text{
+    font-family:'VT323', monospace;
+    color:var(--crt-red);
+    font-size:1.6rem;
+    text-shadow:0 0 10px var(--crt-red);
+    max-width:80vw;
+    margin-bottom:1.6rem;
+    z-index:2;
+  }
+  .finale-btn{
+    font-family:'VT323', monospace;
+    font-size:1.4rem;
+    background:transparent;
+    border:2px solid var(--crt-red);
+    color:var(--crt-red);
+    padding:.7rem 1.6rem;
+    cursor:pointer;
+    position:relative;
+    z-index:2;
+    transition:transform .08s ease;
+  }
+  .finale-progress{
+    margin-top:1rem;
+    font-family:'VT323', monospace;
+    color:var(--crt-green);
+    font-size:1.1rem;
+    z-index:2;
+  }
+  .girl-slot{
+    position:absolute;
+    left:50%; top:52%;
+    transform:translate(-50%,-50%) scale(.4);
+    width:min(70vw, 320px);
+    aspect-ratio:3/4;
+    border-radius:8px;
+    overflow:hidden;
+    opacity:0;
+    z-index:1;
+    transition:transform .35s ease, opacity .35s ease;
+  }
+  .girl-slot img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .shake{ animation:shake .3s ease; }
+  @keyframes shake{
+    0%,100%{transform:translate(0,0);}
+    20%{transform:translate(-6px,3px);}
+    40%{transform:translate(6px,-3px);}
+    60%{transform:translate(-4px,-4px);}
+    80%{transform:translate(4px,4px);}
+  }
+  .flash-white{
+    position:fixed; inset:0; background:#fff; z-index:70;
+    opacity:0; pointer-events:none;
+  }
+  .flash-white.on{ opacity:1; transition:none; }
+  .flash-white.fade{ opacity:0; transition:opacity .5s ease; }
+
+  /* ============ FINAL WARM SCREEN ============ */
+  .final{
+    background:var(--card); border-radius:28px; padding:2.6rem 2rem; text-align:center;
+    box-shadow:0 20px 60px rgba(122, 70, 140, 0.25); display:none;
+  }
+  .final.active{ display:block; animation:warmIn .5s ease; }
+  @keyframes warmIn{ from{transform:scale(.94);} to{transform:scale(1);} }
+  .final h2{ color:var(--ink); font-size:1.4rem; margin-bottom:.5rem; }
+  .final p{ color:var(--ink-soft); line-height:1.6; font-size:1rem; }
+  .final .name{ color:var(--accent); font-weight:800; }
+  .final-gif{ width:100%; max-width:260px; border-radius:16px; margin:1.3rem auto 0; display:block; box-shadow:0 10px 26px rgba(183,156,255,0.35); }
+  .final-zalgo{ margin-top:1.1rem; margin-bottom:0; font-family:'VT323', monospace; font-size:1.15rem; color:var(--crt-red); text-shadow:0 0 8px var(--crt-red); opacity:.85; }
+
+  @media (prefers-reduced-motion: reduce){ *{animation:none !important; transition:none !important;} }
+</style>
+</head>
+<body>
+
+  <div class="dark-overlay" id="darkOverlay"></div>
+
+  <div class="sparkle" id="sp1" style="top:8%; left:12%;">✦</div>
+  <div class="sparkle" id="sp2" style="top:20%; right:10%; animation-delay:1s;">☾</div>
+  <div class="sparkle" id="sp3" style="bottom:12%; left:8%; animation-delay:2s;">✧</div>
+  <div class="sparkle" id="sp4" style="bottom:20%; right:14%; animation-delay:1.6s;">✦</div>
+
+  <!-- corner blink dog -->
+  <div class="lurker" id="lurker"><img src="assets/smile_dog.png" alt=""></div>
+
+  <!-- centered jumpscare -->
+  <div class="jump-dog" id="jumpDog"><img src="assets/jumpscare.png" alt=""></div>
+
+  <div class="stage">
+    <div class="card start" id="startCard">
+      <div class="eyebrow result-eyebrow"><span class="dot"></span> ТЕСТ · КТО ТЫ ИЗ СЕЙЛОР МУН</div>
+      <div class="gif-slot"><img src="assets/gifs/start-min.gif" alt=""></div>
+      <h1>Готова узнать, кто ты из Sailor Moon?</h1>
+      <p class="start-sub">Всего 8 вопросов и пара минут, чтобы узнать, какая ты воительница Сейлор Мун!</p>
+      <button class="cta" id="startBtn">Начать тест</button>
+    </div>
+
+    <div class="card" id="quizCard" style="display:none;">
+      <div class="eyebrow"><span class="dot"></span> ТЕСТ · КТО ТЫ ИЗ СЕЙЛОР МУН</div>
+      <div class="qcount" id="qcount"></div>
+      <div class="gif-slot" id="gifSlot"><img id="gifImg" src="" alt=""></div>
+      <h1 id="qText">Загрузка вопроса…</h1>
+      <div class="options" id="options"></div>
+    </div>
+
+    <div class="card result" id="resultCard" style="display:none;">
+      <div class="eyebrow result-eyebrow"><span class="dot"></span> РЕЗУЛЬТАТ ТЕСТА</div>
+      <div class="badge-ring"><span class="badge" id="resultEmoji">🌙</span></div>
+      <div class="result-kicker">ты воин</div>
+      <h2 id="resultTitle">Твой результат готов</h2>
+      <div class="result-gif-slot" id="resultGifSlot"><img id="resultGifImg" src="" alt=""></div>
+      <p id="resultText"></p>
+      <div class="result-divider"></div>
+      <button class="cta" id="revealBtn">Узнать полностью</button>
+    </div>
+
+    <div class="final" id="finalCard">
+      <h2>С днём рождения, <span class="name">Маргарита</span> 🌙</h2>
+      <p>Желаю тебе в этом году побольше денег, поменьше неадекватных заказчиков и хотя бы один отпуск без рабочего чата. Пусть всё раздражающее на работе решается само, а хорошее случается чаще, чем ты рассчитываешь. С днём рождения, Маргарита!</p>
+      <img class="final-gif" src="assets/gifs/sailor_moon_result-min.gif" alt="">
+      <p class="final-zalgo" id="finalZalgo"></p>
+    </div>
+  </div>
+
+  <!-- brief full-screen zalgo interrupt -->
+  <div class="zalgo-flash" id="zalgoFlash"><span id="zalgoText"></span></div>
+
+  <!-- "anime girl" cursed-download request modal, only closes via "да" -->
+  <div class="girl-modal" id="girlModal">
+    <div class="girl-box">
+      <div class="girl-img-slot" id="girlModalImg"><img id="girlModalImgTag" src="assets/sailor%20moon%20files%20normal%20girl.png" alt=""></div>
+      <div class="girl-line">милая аниме девочка просит тебя скачать файл</div>
+      <div class="girl-quote">«Это подарок. Правда-правда. Просто скачай и посмотри сама.»</div>
+      <div class="girl-buttons">
+        <button class="girl-btn yes" id="girlYesBtn">да</button>
+        <button class="girl-btn no" id="girlNoBtn">нет спасибо</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- interactive final glitch: requires clicking, not passive wait -->
+  <div class="finale-overlay" id="finaleOverlay">
+    <div class="girl-slot" id="girlSlot"><img id="girlSlotImg" src="" alt=""></div>
+    <div class="finale-text" id="finaleText">просто закрой окно. если сможешь.</div>
+    <button class="finale-btn" id="finaleBtn">ЗАКРЫТЬ</button>
+    <div class="finale-progress" id="finaleProgress">0 / 5</div>
+  </div>
+  <div class="flash-white" id="flashWhite"></div>
+
+<script>
+/* ================= DATA ================= */
+const questions = [
+  {gif:"assets/gifs/q1-min.gif", text:"Что ты обычно делаешь субботним утром, когда никуда не нужно спешить и весь день принадлежит тебе одной?", options:[
+    {t:"Отсыпаюсь до обеда, а потом первым делом ищу что-то сладкое на завтрак", tag:"moon"},
+    {t:"Читаю или наконец разбираю вопрос, который давно откладывала", tag:"mercury"},
+    {t:"Иду тренироваться или разбираться с тем, что меня в последнее время бесит", tag:"mars"},
+    {t:"Готовлю завтрак на всех, кто в этот момент рядом со мной", tag:"jupiter"},
+    {t:"Навожу красоту и договариваюсь встретиться с кем-то интересным", tag:"venus"}
+  ]},
+  {gif:"assets/gifs/q2-min.gif", text:"Друг пишет тебе среди ночи, что у него беда! Что ты делаешь в первую же минуту?", options:[
+    {t:"Реву вместе с ним по видеосвязи, а потом уже вместе придумываем, что делать", tag:"moon"},
+    {t:"Спокойно прошу рассказать по порядку и раскладываю ситуацию по полочкам", tag:"mercury"},
+    {t:"Уже одеваюсь, чтобы ехать разбираться с тем, кто это устроил", tag:"mars"},
+    {t:"Сразу еду к нему, обнимаю и остаюсь рядом столько, сколько нужно", tag:"jupiter"},
+    {t:"Пишу что-то отвлекающее и зову его развеяться прямо сейчас", tag:"venus"}
+  ]},
+  {gif:"assets/gifs/q3-min.gif", text:"Если бы можно было выбрать одну суперсилу насовсем, какую бы ты выбрала не задумываясь?", options:[
+    {t:"Что-то, что умеет исцелять и чувствовать чужую боль как свою", tag:"moon"},
+    {t:"Контроль над разумом и способность создавать убедительные иллюзии", tag:"mercury"},
+    {t:"Огонь, который можно направить на то, что этого заслуживает", tag:"mars"},
+    {t:"Власть над стихией, чтобы одним взмахом руки защитить тех, кто рядом", tag:"jupiter"},
+    {t:"Способность влиять на людей и очаровывать их одним взглядом", tag:"venus"}
+  ]},
+  {gif:"assets/gifs/q4-min.gif", text:"Ты узнаёшь, что человек, которому ты доверяла, всё это время тебя обманывал. Что происходит дальше?", options:[
+    {t:"Долго не могу поверить, а потом всё равно нахожу в себе силы простить", tag:"moon"},
+    {t:"Прокручиваю всё заново и ищу момент, где был первый сигнал, который я упустила", tag:"mercury"},
+    {t:"Обрываю всё сразу, без права на апелляцию и без второго шанса", tag:"mars"},
+    {t:"Молчу и ничего не говорю, но не забываю этого уже никогда", tag:"jupiter"},
+    {t:"На людях не подаю виду, а разбираюсь с этим красиво и на своих условиях", tag:"venus"}
+  ]},
+  {gif:"assets/gifs/q5-min.gif", text:"Опиши идеальную встречу с тем, кто тебе действительно дорог. Какой она должна быть?", options:[
+    {t:"Что-то максимально простое и уютное, лишь бы просто быть вместе", tag:"moon"},
+    {t:"Долгий разговор на серьёзную тему, который затягивается до трёх ночи", tag:"mercury"},
+    {t:"Что-то с азартом и движением, спортивное приключение или честное соревнование", tag:"mars"},
+    {t:"Готовим что-то сложное вместе дома, никуда не торопясь", tag:"jupiter"},
+    {t:"Красивое место, где точно будет что вспомнить и что показать", tag:"venus"}
+  ]},
+  {gif:"assets/gifs/q6-min.gif", text:"Что-то внутри тебя иногда пугает даже тебя саму. Что из этого про твою главную слабость?", options:[
+    {t:"Я чувствую слишком много и в итоге распыляюсь на всех сразу", tag:"moon"},
+    {t:"Я ухожу в голову настолько глубоко, что забываю про живых людей рядом", tag:"mercury"},
+    {t:"Я взрываюсь быстрее, чем успеваю хоть что-то обдумать", tag:"mars"},
+    {t:"Я тащу на себе слишком много и никогда не прошу помощи", tag:"jupiter"},
+    {t:"Мне слишком важно, что обо мне думают, и я иногда теряю себя ради этого", tag:"venus"}
+  ]},
+  {gif:"assets/gifs/q7-min.gif", text:"Представь, что тебе пришлось бы драться по-настоящему. За что из этого ты пошла бы до конца?", options:[
+    {t:"За тех, кого люблю, без вопросов и без раздумий", tag:"moon"},
+    {t:"За правду, даже если ради неё придётся остаться одной", tag:"mercury"},
+    {t:"За свою территорию и то, во что я верю", tag:"mars"},
+    {t:"За тех, кто слабее меня и не может постоять за себя сам", tag:"jupiter"},
+    {t:"За любовь, в которую верю, даже если все вокруг в ней сомневаются", tag:"venus"}
+  ]},
+  {gif:"assets/gifs/q8-min.gif", text:"Последний вопрос. Что из этого те, кто тебя действительно знает, сказали бы про тебя не задумываясь?", options:[
+    {t:"Мягкая снаружи, но неожиданно несгибаемая, когда доходит до дела", tag:"moon"},
+    {t:"Все считают меня холодной и ни разу не оказывались правы", tag:"mercury"},
+    {t:"Сначала действие, объяснения будут уже потом, если вообще будут", tag:"mars"},
+    {t:"Надёжная как скала, всегда поможет и не бросит в трудную минуту", tag:"jupiter"},
+    {t:"Обаяние тоже оружие, просто им не все умеют пользоваться", tag:"venus"}
+  ]}
+];
+
+// interruptions fire right after finishing the question at this index (0-based)
+const interruptAfter = {
+  2: 'zalgo',       // after Q3
+  4: 'jumpscare',   // after Q5, dog pop only
+  5: 'dogblink',    // after Q6, corner dog blinks a few times
+  6: 'download'     // after Q7, cursed file
+};
+
+const results = {
+  moon:    {emoji:"🌙", title:"Мун",      gif:"assets/gifs/sailor_moon_result-min.gif",     text:"Ведёшь за собой не силой, а тем, что не сдаёшься и веришь в людей больше, чем они сами в себя.", scaryGirl:"assets/final_sailor_moon_result_creepy.png"},
+  mercury: {emoji:"💧", title:"Меркурий", gif:"assets/gifs/sailor_mercury_result-min.gif",  text:"Самая опасная в комнате обычно та, что молчит и уже всё просчитала.", scaryGirl:"assets/final_sailor_mercury_result_creepy.png"},
+  mars:    {emoji:"🔥", title:"Марс",     gif:"assets/gifs/sailor_mars_result-min.gif",     text:"Твоя интуиция срабатывает раньше, чем ты успеваешь её объяснить.", scaryGirl:"assets/final_sailor_mars_result_creepy.png"},
+  jupiter: {emoji:"🌿", title:"Юпитер",   gif:"assets/gifs/sailor_jupiter_result-min.gif",  text:"За нежностью прячется единственная в компании, кто реально может дать отпор.", scaryGirl:"assets/final_sailor_jupiter_result_creepy.png"},
+  venus:   {emoji:"💛", title:"Венера",   gif:"assets/gifs/sailor_venus_result-min.gif",    text:"Мир и так достаточно мрачный, а ты вносишь в него драму по собственному вкусу.", scaryGirl:"assets/final_sailor_venus_result_creepy.png"}
+};
+
+let current = 0;
+const qText = document.getElementById('qText');
+const optionsEl = document.getElementById('options');
+const qcount = document.getElementById('qcount');
+const gifImg = document.getElementById('gifImg');
+const card = document.getElementById('quizCard');
+const lurker = document.getElementById('lurker');
+const darkOverlay = document.getElementById('darkOverlay');
+
+function setDarkness(v){
+  darkOverlay.style.opacity = v;
+}
+
+function blinkDog(visibleMs = 550, gentleFade = false){
+  lurker.style.transition = 'opacity .15s ease';
+  lurker.style.opacity = 0.75;
+  setTimeout(() => {
+    lurker.style.transition = gentleFade ? 'opacity .7s ease' : 'opacity .15s ease';
+    lurker.style.opacity = 0;
+  }, visibleMs);
+}
+
+function zalgoify(str, intensity=6){
+  const marks = ['\u0300','\u0301','\u0303','\u0308','\u0330','\u0332','\u0335','\u0337','\u0345','\u0361'];
+  return str.split('').map(ch => {
+    if(ch === ' ') return ch;
+    let out = ch;
+    const n = Math.floor(Math.random()*intensity);
+    for(let i=0;i<n;i++) out += marks[Math.floor(Math.random()*marks.length)];
+    return out;
+  }).join('');
+}
+
+const scores = {moon:0, mercury:0, mars:0, jupiter:0, venus:0};
+
+function renderQuestion(){
+  const q = questions[current];
+  qcount.textContent = `вопрос ${current+1} из ${questions.length}`;
+  gifImg.src = q.gif;
+  qText.textContent = q.text;
+  optionsEl.innerHTML = '';
+  const isCreepy = current >= 3; // options get an unsettling edge from Q4 onward
+  optionsEl.classList.toggle('creepy', isCreepy);
+  q.options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'opt';
+    btn.textContent = opt.t;
+
+    let glitchInterval = null;
+    const stopGlitch = () => {
+      if(glitchInterval){ clearInterval(glitchInterval); glitchInterval = null; }
+      btn.textContent = opt.t;
+    };
+    if(isCreepy){
+      btn.addEventListener('mouseenter', () => {
+        glitchInterval = setInterval(() => { btn.textContent = zalgoify(opt.t, 4); }, 90);
+      });
+      btn.addEventListener('mouseleave', stopGlitch);
+    }
+
+    btn.onclick = () => {
+      stopGlitch();
+      scores[opt.tag]++;
+      const finishedIndex = current; // question just answered
+      current++;
+      setDarkness(Math.min(current / questions.length * 0.6, 0.6));
+      advance(); // render the next question (or result) immediately
+      if(interruptAfter[finishedIndex]){
+        runInterrupt(interruptAfter[finishedIndex], () => {});
+      }
+    };
+    optionsEl.appendChild(btn);
+  });
+}
+
+function advance(){
+  if(current < questions.length){
+    renderQuestion();
+  } else {
+    showResult();
+  }
+}
+
+function runInterrupt(type, done){
+  if(type === 'zalgo'){
+    const overlay = document.getElementById('zalgoFlash');
+    const span = document.getElementById('zalgoText');
+    span.textContent = zalgoify('это не тот тест, который ты начинала', 3);
+    card.classList.add('corrupted');
+    overlay.classList.add('active');
+    setTimeout(() => {
+      overlay.classList.add('fading');
+      setTimeout(() => {
+        overlay.classList.remove('active','fading');
+        done();
+      }, 700);
+    }, 2400);
+  }
+
+  if(type === 'jumpscare'){
+    const jumpDog = document.getElementById('jumpDog');
+    jumpDog.classList.add('pop');
+    setTimeout(() => {
+      jumpDog.classList.remove('pop');
+      done();
+    }, 650);
+  }
+
+  if(type === 'dogblink'){
+    blinkDog(500);                                   // quick first peek
+    setTimeout(() => blinkDog(700, true), 1900);      // one more, then a slow fade for good
+    setTimeout(done, 1900 + 700 + 700);
+  }
+
+  if(type === 'download'){
+    const modal = document.getElementById('girlModal');
+    const imgWrap = document.getElementById('girlModalImg');
+    const imgTag = document.getElementById('girlModalImgTag');
+    const yesBtn = document.getElementById('girlYesBtn');
+    const noBtn = document.getElementById('girlNoBtn');
+    const fileBaseName = 'файл_смерти';
+    const NORMAL_GIRL = 'assets/sailor%20moon%20files%20normal%20girl.png';
+    const CREEPY_GIRL = 'assets/sailor%20moon%20files%20creepy%20girl.png';
+
+    modal.classList.add('active');
+    imgTag.src = NORMAL_GIRL;
+
+    // image occasionally flickers to the "scary" version
+    const scaryOn = () => {
+      imgWrap.classList.add('scary');
+      imgTag.src = CREEPY_GIRL;
+    };
+    const scaryOff = () => {
+      imgWrap.classList.remove('scary');
+      imgTag.src = NORMAL_GIRL;
+    };
+    const flickerInterval = setInterval(() => {
+      scaryOn();
+      setTimeout(scaryOff, 120);
+      setTimeout(scaryOn, 260);
+      setTimeout(scaryOff, 380);
+    }, 1800 + Math.random()*900);
+
+    // "нет спасибо" dodges when the cursor gets close, and comes back once it's clearly gone
+    const girlBox = modal.querySelector('.girl-box');
+    const chaseNoBtn = (e) => {
+      const rect = noBtn.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
+      if(dist < 60 && !noBtn.classList.contains('dodged')){
+        const dx = (Math.random()*140-70).toFixed(0);
+        const dy = (Math.random()*50-60).toFixed(0);
+        noBtn.style.transform = `translate(${dx}px, ${dy}px)`;
+        noBtn.classList.add('dodged');
+      } else if(dist > 110 && noBtn.classList.contains('dodged')){
+        noBtn.classList.remove('dodged');
+        noBtn.style.transform = '';
+      }
+    };
+    girlBox.addEventListener('mousemove', chaseNoBtn);
+    noBtn.onclick = (e) => { e.preventDefault(); };
+
+    yesBtn.onclick = () => {
+      clearInterval(flickerInterval);
+      girlBox.removeEventListener('mousemove', chaseNoBtn);
+      modal.classList.remove('active');
+      noBtn.classList.remove('dodged');
+      noBtn.style.transform = '';
+      triggerCursedDownload(fileBaseName);
+      done();
+    };
+  }
+}
+
+function triggerCursedDownload(baseName){
+  const content = 'ОБЕРНNСЬ';
+  const blob = new Blob([content], {type:'text/plain;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = baseName + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  document.getElementById('startCard').style.display = 'none';
+  document.getElementById('quizCard').style.display = 'block';
+  renderQuestion();
+});
+
+/* ================= RESULT ================= */
+let currentResult = null;
+
+function showResult(){
+  document.getElementById('quizCard').style.display = 'none';
+  const topTag = Object.keys(scores).reduce((a,b) => scores[b] > scores[a] ? b : a);
+  const r = results[topTag];
+  currentResult = r;
+  const resultCard = document.getElementById('resultCard');
+  resultCard.classList.toggle('corrupted', card.classList.contains('corrupted'));
+  document.getElementById('resultEmoji').textContent = r.emoji;
+  document.getElementById('resultTitle').textContent = r.title;
+  document.getElementById('resultGifImg').src = r.gif;
+  document.getElementById('resultText').textContent = r.text;
+  resultCard.style.display = 'block';
+}
+
+document.getElementById('revealBtn').addEventListener('click', startFinale);
+
+/* ================= INTERACTIVE FINALE (requires clicks, not a passive wait) ================= */
+const NEEDED_CLICKS = 3;
+const finaleTexts = ['она видит тебя.', 'обернись.'];
+let clicks = 0;
+
+function startFinale(){
+  document.getElementById('resultCard').style.display = 'none';
+  setDarkness(0.9);
+  const overlay = document.getElementById('finaleOverlay');
+  const btn = document.getElementById('finaleBtn');
+  const txt = document.getElementById('finaleText');
+  const prog = document.getElementById('finaleProgress');
+  const girl = document.getElementById('girlSlot');
+  const girlImg = document.getElementById('girlSlotImg');
+  girlImg.src = currentResult ? currentResult.scaryGirl : 'assets/final_sailor_moon_result_creepy.png';
+  txt.textContent = 'просто закрой окно. если сможешь.';
+  clicks = 0;
+  prog.textContent = `0 / ${NEEDED_CLICKS}`;
+  girl.style.opacity = 0;
+  girl.style.transform = 'translate(-50%,-50%) scale(.4)';
+  overlay.classList.add('active');
+
+  btn.onclick = () => {
+    clicks++;
+    overlay.classList.add('shake');
+    setTimeout(() => overlay.classList.remove('shake'), 300);
+    prog.textContent = `${clicks} / ${NEEDED_CLICKS}`;
+
+    // button dodges a bit + text corrupts further with each click
+    const dx = (Math.random()*80-40).toFixed(0);
+    const dy = (Math.random()*30-15).toFixed(0);
+    btn.style.transform = `translate(${dx}px, ${dy}px)`;
+    if(clicks >= NEEDED_CLICKS){
+      txt.textContent = 'ДОСМОТ?';
+    } else {
+      txt.textContent = finaleTexts[clicks - 1];
+    }
+
+    // the girl gets closer and more visible with every click
+    const scale = 0.4 + (clicks / NEEDED_CLICKS) * 0.9;
+    girl.style.opacity = Math.min(0.25 + (clicks / NEEDED_CLICKS) * 0.7, 0.95);
+    girl.style.transform = `translate(-50%,-50%) scale(${scale.toFixed(2)})`;
+
+    if(clicks >= NEEDED_CLICKS){
+      setTimeout(resolveFinale, 800);
+    }
+  };
+}
+
+function resolveFinale(){
+  const overlay = document.getElementById('finaleOverlay');
+  const flash = document.getElementById('flashWhite');
+  flash.classList.add('on');
+  setTimeout(() => {
+    overlay.classList.remove('active');
+    // snap darkness to 0 instantly while still hidden behind the opaque flash,
+    // otherwise its normal 1.4s fade keeps dimming the scene after the flash is gone
+    darkOverlay.style.transition = 'none';
+    setDarkness(0);
+    darkOverlay.offsetHeight; // force reflow so the instant value commits before restoring the transition
+    darkOverlay.style.transition = 'opacity 1.4s ease';
+    document.getElementById('finalZalgo').textContent = zalgoify('Спокойной ночи', 4);
+    document.getElementById('finalCard').classList.add('active');
+    flash.classList.remove('on');
+    flash.classList.add('fade');
+    setTimeout(() => flash.classList.remove('fade'), 500);
+  }, 120);
+}
+</script>
+
+</body>
+</html>
